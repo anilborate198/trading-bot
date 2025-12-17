@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 
 load_dotenv()
 init(autoreset=True)
+
 # ==============CONFIGURATION==============# 
 class Config:
     MODE = os.getenv("TRADING_MODE", "PAPER")
@@ -29,18 +30,18 @@ class Config:
     TRAILING_STOP_DRAWDOWN = 2500
     MAX_TRADES_PER_DAY = 8
     MAX_DAILY_LOSS = 10000
-    MAX_STOCKS_TO_TRADE = 2  # Top stocks
-    MIN_STOCK_PRICE = 100  # NEW: Minimum LTP for stock selection
+    MAX_STOCKS_TO_TRADE = 2
+    MIN_STOCK_PRICE = 100
     
     # Breakout Parameters
-    TICK_INTERVAL = 2  # seconds between price checks
+    TICK_INTERVAL = 2
     
     # Exit Time
-    AUTO_EXIT_TIME = "15:15"  # NEW: Auto-close all positions at 3:15 PM
+    AUTO_EXIT_TIME = "15:15"
     
-    # Server
+    # Server - FIXED for Render
     WS_HOST = "0.0.0.0"
-    WS_PORT = 8001
+    WS_PORT = int(os.getenv('PORT', 10000))  # Use Render's PORT
     LOG_TRADES = True
     LOG_FILE = "trades_log.json"
 
@@ -54,7 +55,6 @@ print(f"Top Stocks: {Config.MAX_STOCKS_TO_TRADE} | Tick Interval: {Config.TICK_I
 print(f"Min Stock Price: ₹{Config.MIN_STOCK_PRICE} | Auto-Exit Time: {Config.AUTO_EXIT_TIME}")
 print(f"{Fore.CYAN}{'='*70}\n")
 
-# ============WEBSOCKET MANAGER===================# 
 # ============WEBSOCKET MANAGER===================# 
 class WSManager:
     def __init__(self):
@@ -76,17 +76,14 @@ class WSManager:
             "breakout_status": {}
         }
         
-        # Health check endpoint
         @self.app.get("/health")
         async def health_check():
             return {"status": "healthy", "timestamp": datetime.now().isoformat()}
         
-        # Root endpoint
         @self.app.get("/")
         async def root():
             return {"message": "Trading Bot API", "status": "running"}
         
-        # WebSocket endpoint
         @self.app.websocket("/ws/trading")
         async def ws_endpoint(ws: WebSocket):
             await ws.accept()
@@ -104,12 +101,12 @@ class WSManager:
         def run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            port = int(os.getenv('PORT', Config.WS_PORT))
+            port = Config.WS_PORT
+            print(f"{Fore.GREEN}🌐 Starting server on port {port}...")
             uvicorn.run(self.app, host="0.0.0.0", port=port, log_level="error")
         threading.Thread(target=run, daemon=True).start()
         time.sleep(2)
-        port = int(os.getenv('PORT', Config.WS_PORT))
-        print(f"{Fore.GREEN}🌐 WebSocket Server: ws://0.0.0.0:{port}/ws/trading")
+        print(f"{Fore.GREEN}🌐 WebSocket Server: ws://0.0.0.0:{Config.WS_PORT}/ws/trading")
     
     async def broadcast(self, data):
         for conn in self.connections[:]:
@@ -119,6 +116,8 @@ class WSManager:
                 self.connections.remove(conn)
 
 ws = WSManager()
+
+
 
 # =============== ANGEL ONE CLIENT====================# 
 class AngelClient:
