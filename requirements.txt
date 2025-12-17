@@ -1,0 +1,13 @@
+
+```txt
+requests==2.31.0
+colorama==0.4.6
+SmartApi-Python==1.3.5
+pyotp==2.9.0
+fastapi==0.109.0
+uvicorn==0.27.0
+python-dotenv==1.0.0
+pandas==2.1.4
+beautifulsoup4==4.12.3
+python-multipart==0.0.6
+```

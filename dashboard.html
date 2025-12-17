@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #0a0e27 0%, #1a1d35 50%, #2d1b3d 100%); color: #e1e8ed; padding: 10px; min-height: 100vh; font-size: 15px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 10px 15px; background: rgba(26, 35, 50, 0.6); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .header-left h1 { font-size: 24px; font-weight: 700; color: #4a9eff; margin-bottom: 2px; }
+        .header-left p { color: #8899a6; font-size: 14px; }
+        .badge { display: inline-block; padding: 4px 10px; background: #f59e0b; color: #1a2332; border-radius: 4px; font-weight: 600; font-size: 11px; margin-left: 8px; }
+        .badge.live { background: #10b981; color: #fff; animation: pulse-badge 2s infinite; }
+        @keyframes pulse-badge { 0%, 100% { box-shadow: 0 0 5px rgba(16, 185, 129, 0.5); } 50% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.8); } }
+        .header-right { text-align: right; }
+        .total-pnl { font-size: 13px; color: #8899a6; margin-bottom: 2px; }
+        .pnl-value { font-size: 28px; font-weight: 700; color: #10b981; }
+        .pnl-value.negative { color: #ef4444; }
+        .status-indicator { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; padding: 3px 8px; background: rgba(239, 68, 68, 0.2); border-radius: 12px; font-size: 12px; }
+        .status-dot { width: 8px; height: 8px; background: #ef4444; border-radius: 50%; animation: pulse 2s infinite; }
+        .status-indicator.online .status-dot { background: #10b981; animation: spin 2s linear infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes spin { 0% { transform: rotate(0deg); box-shadow: 0 0 5px #10b981; } 50% { box-shadow: 0 0 15px #10b981; } 100% { transform: rotate(360deg); box-shadow: 0 0 5px #10b981; } }
+        .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px; }
+        .stat-card { padding: 8px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.1); position: relative; overflow: hidden; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+        .stat-card.blue { background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(59, 130, 246, 0.1)); }
+        .stat-card.blue::before { background: #3b82f6; }
+        .stat-card.purple { background: linear-gradient(135deg, rgba(147, 51, 234, 0.2), rgba(168, 85, 247, 0.1)); }
+        .stat-card.purple::before { background: #a855f7; }
+        .stat-card.green { background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(52, 211, 153, 0.1)); }
+        .stat-card.green::before { background: #10b981; }
+        .stat-card.red { background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(248, 113, 113, 0.1)); }
+        .stat-card.red::before { background: #ef4444; }
+        .stat-card.orange { background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(251, 146, 60, 0.1)); }
+        .stat-card.orange::before { background: #f97316; }
+        .stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .stat-label { color: #8899a6; font-size: 12px; }
+        .stat-icon { font-size: 18px; }
+        .stat-value { font-size: 20px; font-weight: 700; }
+        .main-grid { display: grid; grid-template-columns: 1.8fr 1fr; gap: 10px; }
+        .panel { background: rgba(26, 35, 50, 0.6); border-radius: 8px; padding: 10px; border: 1px solid rgba(255, 255, 255, 0.1); margin-bottom: 10px; }
+        .panel-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .panel-icon { font-size: 18px; }
+        .panel-title { font-size: 15px; font-weight: 600; }
+        .empty-state { text-align: center; padding: 20px 10px; color: #8899a6; font-size: 12px; }
+        .empty-icon { font-size: 28px; margin-bottom: 6px; opacity: 0.3; }
+        .stock-item { background: rgba(15, 20, 25, 0.6); padding: 8px; border-radius: 6px; margin-bottom: 6px; border: 1px solid rgba(255, 255, 255, 0.05); }
+        .stock-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .stock-symbol { font-weight: 600; font-size: 13px; }
+        .stock-details { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; font-size: 11px; }
+        .detail-item { display: flex; justify-content: space-between; }
+        .detail-label { color: #8899a6; }
+        .position-card { background: rgba(15, 20, 25, 0.6); padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 2px solid #3b82f6; }
+        .position-card.closed { border-left-color: #6b7280; opacity: 0.7; }
+        .position-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .position-symbol { font-weight: 700; font-size: 16px; }
+        .position-type { padding: 3px 7px; border-radius: 3px; font-size: 12px; font-weight: 700; }
+        .position-type.ce { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+        .position-type.pe { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .position-details { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 13px; font-weight: 700; }
+        .sl-section { display: flex; flex-direction: column; gap: 3px; }
+        .sl-label { color: #8899a6; margin-bottom: 2px; font-size: 11px; }
+        .sl-value { color: #ef4444; font-size: 13px; }
+        .sl-ltp { color: #f59e0b; font-size: 11px; margin-top: 2px; }
+        .position-pnl { grid-column: 1 / -1; padding-top: 8px; border-top: 2px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; font-weight: 700; font-size: 17px; }
+        .pnl-positive { color: #10b981; }
+        .pnl-negative { color: #ef4444; }
+        .log-container { max-height: 120px; overflow-y: auto; }
+        .log-container::-webkit-scrollbar { width: 4px; }
+        .log-container::-webkit-scrollbar-track { background: rgba(15, 20, 25, 0.4); border-radius: 2px; }
+        .log-container::-webkit-scrollbar-thumb { background: rgba(74, 158, 255, 0.5); border-radius: 2px; }
+        .log-item { padding: 6px; border-left: 2px solid #3b82f6; margin-bottom: 4px; font-size: 11px; background: rgba(15, 20, 25, 0.4); border-radius: 3px; }
+        .log-time { color: #8899a6; font-size: 10px; margin-bottom: 2px; }
+        .gap-stock { display: flex; justify-content: space-between; align-items: center; padding: 6px; background: rgba(15, 20, 25, 0.4); border-radius: 4px; margin-bottom: 4px; }
+        .gap-symbol { font-weight: 600; font-size: 12px; }
+        .gap-percent { padding: 3px 7px; border-radius: 3px; font-weight: 600; font-size: 11px; }
+        .gap-up { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+        .gap-down { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .system-status { display: grid; gap: 4px; font-size: 9px; }
+        .status-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+        .status-label { color: #8899a6; }
+        .breakout-monitor { background: rgba(15, 20, 25, 0.4); padding: 8px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.05); font-family: 'Courier New', monospace; font-size: 11px; max-height: 200px; overflow-y: auto; }
+        .monitor-line { margin-bottom: 2px; padding: 2px; }
+        .monitor-line.breakout { background: rgba(16, 185, 129, 0.1); border-left: 2px solid #10b981; padding-left: 4px; }
+        .col-left, .col-right { display: flex; flex-direction: column; }
+        @media (max-width: 1200px) { .main-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <h1>Trading Dashboard<span class="badge" id="tradingModeBadge">📝 PAPER</span></h1>
+            <p>Breakout in Stock Options with Gap UP/Down Stock</p>
+        </div>
+        <div class="header-right">
+            <div class="total-pnl">Total P&L</div>
+            <div class="pnl-value" id="totalPnl">₹0</div>
+            <span class="status-indicator" id="connectionStatus"><span class="status-dot"></span><span>OFFLINE</span></span>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card blue"><div class="stat-header"><span class="stat-label">Open</span><span class="stat-icon">📊</span></div><div class="stat-value" id="openTrades">0</div></div>
+        <div class="stat-card purple"><div class="stat-header"><span class="stat-label">Closed</span><span class="stat-icon">✅</span></div><div class="stat-value" id="closedTrades">0</div></div>
+        <div class="stat-card green"><div class="stat-header"><span class="stat-label">Gap Up</span><span class="stat-icon">📈</span></div><div class="stat-value" id="gapUpCount">0</div></div>
+        <div class="stat-card red"><div class="stat-header"><span class="stat-label">Gap Down</span><span class="stat-icon">📉</span></div><div class="stat-value" id="gapDownCount">0</div></div>
+        <div class="stat-card orange"><div class="stat-header"><span class="stat-label">Monitor</span><span class="stat-icon">👁️</span></div><div class="stat-value" id="monitoringCount">0</div></div>
+    </div>
+
+    <div class="main-grid">
+        <div class="col-left">
+            <div class="panel">
+                <div class="panel-header"><span class="panel-icon">📊</span><span class="panel-title">Open Positions</span><span style="margin-left: auto; font-weight: 600; font-size: 11px;" id="openPnl">₹0</span></div>
+                <div id="openPositions"><div class="empty-state"><div class="empty-icon">📈</div><div>No open positions</div></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><span class="panel-icon">⏱️</span><span class="panel-title">Live Breakout Monitor</span></div>
+                <div id="breakoutMonitor"><div class="empty-state"><div class="empty-icon">⏳</div><div>Waiting for monitoring...</div></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><span class="panel-icon">👁️</span><span class="panel-title">Selected Stocks</span></div>
+                <div id="stocksSelected"><div class="empty-state"><div class="empty-icon">🎯</div><div>No stocks selected</div></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><span class="panel-icon">✅</span><span class="panel-title">Closed Positions</span></div>
+                <div id="closedPositions"><div class="empty-state"><div class="empty-icon">📋</div><div>No closed positions</div></div></div>
+            </div>
+        </div>
+        <div class="col-right">
+            <div class="panel">
+                <div class="panel-header"><span class="panel-icon">📈</span><span class="panel-title">Gap Up</span></div>
+                <div id="gapUpStocks"><div class="empty-state"><div style="font-size: 10px;">No gap up</div></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><span class="panel-icon">📉</span><span class="panel-title">Gap Down</span></div>
+                <div id="gapDownStocks"><div class="empty-state"><div style="font-size: 10px;">No gap down</div></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><span class="panel-icon">⚡</span><span class="panel-title">Logs</span></div>
+                <div class="log-container" id="processLogs"><div class="empty-state"><div style="font-size: 10px;">Waiting...</div></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><span class="panel-icon">🔌</span><span class="panel-title">System</span></div>
+                <div class="system-status">
+                    <div class="status-row"><span class="status-label">Connection</span><span id="sysConnection">🔴 OFF</span></div>
+                    <div class="status-row"><span class="status-label">Mode</span><span id="sysMode">📝 PAPER</span></div>
+                    <div class="status-row"><span class="status-label">Last Update</span><span id="sysLastUpdate">--:--</span></div>
+                    <div class="status-row"><span class="status-label">Active</span><span id="sysActiveTrades">0</span></div>
+                    <div class="status-row"><span class="status-label">Total</span><span id="sysTotalTrades">0</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        let logs = [];
+        let monitoringData = {};
+        let selectedStocks = [];
+        const maxReconnectAttempts = 5;
+        
+        function connectWebSocket() {
+            try {
+                // Automatic detection of WebSocket URL
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const wsHost = window.location.host || 'localhost:8001';
+ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/trading`);
+console.log('Connecting to:', `${wsProtocol}//${wsHost}/ws/trading`);
+                
+                ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    reconnectAttempts = 0;
+                    updateConnectionStatus(true);
+                    addLog('Connected to trading server');
+                };
+                
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    updateDashboard(data);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    addLog('Connection error occurred');
+                };
+                
+                ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    updateConnectionStatus(false);
+                    addLog('Disconnected from server');
+                    
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        setTimeout(() => {
+                            addLog(`Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                            connectWebSocket();
+                        }, 3000);
+                    }
+                };
+            } catch (error) {
+                console.error('Connection failed:', error);
+                updateConnectionStatus(false);
+            }
+        }
+        
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            const sysConnection = document.getElementById('sysConnection');
+            
+            if (connected) {
+                statusEl.classList.add('online');
+                statusEl.innerHTML = '<span class="status-dot"></span><span>ONLINE</span>';
+                sysConnection.textContent = '🟢 ON';
+            } else {
+                statusEl.classList.remove('online');
+                statusEl.innerHTML = '<span class="status-dot"></span><span>OFFLINE</span>';
+                sysConnection.textContent = '🔴 OFF';
+            }
+        }
+        
+        function addLog(message) {
+            logs.unshift({
+                time: new Date().toLocaleTimeString(),
+                message: message
+            });
+            
+            if (logs.length > 20) logs.pop();
+            
+            document.getElementById('processLogs').innerHTML = logs.map(log => 
+                `<div class="log-item"><div class="log-time">${log.time}</div><div>${log.message}</div></div>`
+            ).join('');
+        }
+        
+        function updateDashboard(data) {
+            const {
+                trades = {},
+                gap_stocks = { up: [], down: [] },
+                total_pnl = 0,
+                last_update,
+                is_live_trading = false
+            } = data;
+            
+            const tradesArray = Object.values(trades);
+            const openTrades = tradesArray.filter(t => t.status === 'open');
+            const closedTrades = tradesArray.filter(t => t.status === 'closed');
+            
+            // Update trading mode badge
+            const badge = document.getElementById('tradingModeBadge');
+            const sysMode = document.getElementById('sysMode');
+            if (is_live_trading) {
+                badge.textContent = '🔥 LIVE';
+                badge.className = 'badge live';
+                sysMode.textContent = '🔥 LIVE';
+                sysMode.style.color = '#10b981';
+                sysMode.style.fontWeight = '700';
+            } else {
+                badge.textContent = '📝 PAPER';
+                badge.className = 'badge';
+                sysMode.textContent = '📝 PAPER';
+                sysMode.style.color = '#f59e0b';
+                sysMode.style.fontWeight = '600';
+            }
+            
+            // Update monitoring stocks
+            const monitoringStocks = new Set();
+            tradesArray.forEach(trade => {
+                if (trade.symbol) {
+                    monitoringStocks.add(trade.symbol);
+                }
+            });
+            
+            // Update total P&L
+            const totalPnlEl = document.getElementById('totalPnl');
+            totalPnlEl.textContent = `₹${total_pnl.toLocaleString()}`;
+            totalPnlEl.className = total_pnl >= 0 ? 'pnl-value' : 'pnl-value negative';
+            
+            // Update stats
+            document.getElementById('openTrades').textContent = openTrades.length;
+            document.getElementById('closedTrades').textContent = closedTrades.length;
+            document.getElementById('gapUpCount').textContent = gap_stocks.up.length;
+            document.getElementById('gapDownCount').textContent = gap_stocks.down.length;
+            document.getElementById('monitoringCount').textContent = monitoringStocks.size;
+            
+            // Update system info
+            if (last_update) {
+                document.getElementById('sysLastUpdate').textContent = last_update;
+            }
+            document.getElementById('sysActiveTrades').textContent = openTrades.length;
+            document.getElementById('sysTotalTrades').textContent = tradesArray.length;
+            
+            // Update sections
+            updateGapStocks('gapUpStocks', gap_stocks.up, 'up');
+            updateGapStocks('gapDownStocks', gap_stocks.down, 'down');
+            updateSelectedStocks(tradesArray);
+            updateBreakoutMonitor(tradesArray);
+            updatePositions('openPositions', openTrades, false);
+            updatePositions('closedPositions', closedTrades, true);
+            
+            // Update open positions P&L
+            const openPnl = openTrades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
+            document.getElementById('openPnl').textContent = `₹${openPnl.toLocaleString()}`;
+        }
+        
+        function updateGapStocks(elementId, stocks, type) {
+            const element = document.getElementById(elementId);
+            
+            if (stocks.length === 0) {
+                element.innerHTML = `<div class="empty-state"><div style="font-size: 10px;">No gap ${type}</div></div>`;
+                return;
+            }
+            
+            element.innerHTML = stocks.map(stock => 
+                `<div class="gap-stock">
+                    <span class="gap-symbol">${stock.symbol}</span>
+                    <span class="gap-percent ${type === 'up' ? 'gap-up' : 'gap-down'}">${stock['gap%'].toFixed(2)}%</span>
+                </div>`
+            ).join('');
+        }
+        
+        function updateSelectedStocks(trades) {
+            const element = document.getElementById('stocksSelected');
+            const stocksMap = new Map();
+            
+            trades.forEach(trade => {
+                if (trade.symbol && !stocksMap.has(trade.symbol)) {
+                    stocksMap.set(trade.symbol, {
+                        symbol: trade.symbol,
+                        ce_symbol: trade.ce_symbol || (trade.type === 'CE' ? (trade.tradingsymbol || 'N/A') : 'N/A'),
+                        pe_symbol: trade.pe_symbol || (trade.type === 'PE' ? (trade.tradingsymbol || 'N/A') : 'N/A'),
+                        entry: trade.entry,
+                        lot: trade.lot
+                    });
+                }
+            });
+            
+            if (stocksMap.size === 0) {
+                element.innerHTML = `<div class="empty-state"><div class="empty-icon">🎯</div><div>No stocks selected</div></div>`;
+                return;
+            }
+            
+            element.innerHTML = Array.from(stocksMap.values()).map(stock => 
+                `<div class="stock-item">
+                    <div class="stock-header">
+                        <span class="stock-symbol">${stock.symbol}</span>
+                        <span style="color: #10b981; font-size: 9px;">● LIVE</span>
+                    </div>
+                    <div class="stock-details">
+                        <div class="detail-item"><span class="detail-label">CE:</span><span>${stock.ce_symbol}</span></div>
+                        <div class="detail-item"><span class="detail-label">PE:</span><span>${stock.pe_symbol}</span></div>
+                        <div class="detail-item"><span class="detail-label">Lot:</span><span>${stock.lot || 'N/A'}</span></div>
+                        <div class="detail-item"><span class="detail-label">Status:</span><span style="color: #f59e0b;">🔥</span></div>
+                    </div>
+                </div>`
+            ).join('');
+        }
+        
+        function updateBreakoutMonitor(trades) {
+            const element = document.getElementById('breakoutMonitor');
+            
+            if (trades.length === 0) {
+                element.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div><div>Waiting...</div></div>`;
+                return;
+            }
+            
+            const openTrades = trades.filter(t => t.status === 'open');
+            const recentEvents = [];
+            
+            trades.forEach(trade => {
+                if (trade.entry_time) {
+                    recentEvents.push({
+                        time: trade.entry_time,
+                        message: `🚀 ${trade.type} BREAKOUT: ${trade.symbol} @ ₹${trade.entry?.toFixed(2)}`,
+                        type: 'breakout'
+                    });
+                }
+                
+                if (trade.exit_time && trade.status === 'closed') {
+                    recentEvents.push({
+                        time: trade.exit_time,
+                        message: `${trade.pnl >= 0 ? '🎯 EXIT' : '🛑 SL'}: ${trade.symbol} @ ₹${trade.exit?.toFixed(2)} | PnL: ₹${trade.pnl?.toLocaleString()}`,
+                        type: 'exit'
+                    });
+                }
+            });
+            
+            recentEvents.sort((a, b) => {
+                if (!a.time || !b.time) return 0;
+                return b.time.localeCompare(a.time);
+            });
+            
+            let html = '<div class="breakout-monitor">';
+            
+            if (openTrades.length > 0) {
+                html += '<div style="color: #10b981; margin-bottom: 6px; font-weight: 600;">● LIVE</div>';
+                openTrades.forEach(trade => {
+                    const pnl = trade.pnl || 0;
+                    const pnlColor = pnl >= 0 ? '#10b981' : '#ef4444';
+                    const pnlSign = pnl >= 0 ? '+' : '';
+                    html += `<div class="monitor-line" style="color: ${trade.type === 'CE' ? '#10b981' : '#ef4444'}">
+                        [${new Date().toLocaleTimeString()}] ${trade.symbol} ${trade.type} | ₹${trade.entry?.toFixed(2)} | 
+                        <span style="color: ${pnlColor}">${pnlSign}₹${pnl.toLocaleString()}</span>
+                    </div>`;
+                });
+                html += '<div style="margin: 8px 0; border-top: 1px solid rgba(255,255,255,0.1);"></div>';
+            }
+            
+            if (recentEvents.length > 0) {
+                html += '<div style="color: #8899a6; margin-bottom: 4px; font-size: 8px;">EVENTS:</div>';
+                recentEvents.slice(0, 8).forEach(event => {
+                    html += `<div class="monitor-line ${event.type === 'breakout' ? 'breakout' : ''}">
+                        [${event.time}] ${event.message}
+                    </div>`;
+                });
+            } else {
+                html += '<div style="color: #8899a6;">Waiting...</div>';
+            }
+            
+            html += '</div>';
+            element.innerHTML = html;
+        }
+        
+        function updatePositions(elementId, positions, isClosed) {
+            const element = document.getElementById(elementId);
+            
+            if (positions.length === 0) {
+                element.innerHTML = `<div class="empty-state">
+                    <div class="empty-icon">${isClosed ? '📋' : '📈'}</div>
+                    <div>No ${isClosed ? 'closed' : 'open'}</div>
+                </div>`;
+                return;
+            }
+            
+            element.innerHTML = positions.map(trade => {
+                const pnlClass = trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                const pnlSign = trade.pnl >= 0 ? '+' : '';
+                const pnlPercent = trade.entry ? ((trade.pnl / (trade.entry * trade.lot)) * 100).toFixed(2) : 0;
+                const arrow = trade.pnl >= 0 ? '⬆️' : '⬇️';
+                const ltpChange = trade.entry && trade.ltp ? ((trade.ltp - trade.entry) / trade.entry * 100).toFixed(2) : 0;
+                const ltpColor = ltpChange >= 0 ? '#10b981' : '#ef4444';
+                const strike = trade.tradingsymbol ? trade.tradingsymbol.match(/\d{5,}/)?.[0] || 'N/A' : 'N/A';
+                const slRs = trade.stop_loss && trade.entry ? Math.abs(trade.entry - trade.stop_loss).toFixed(2) : 'N/A';
+                const slLtp = trade.stop_loss ? trade.stop_loss.toFixed(2) : 'N/A';
+                const lockProfit = trade.lock_profit ? trade.lock_profit.toFixed(2) : 'Not Set';
+                
+                return `<div class="position-card ${isClosed ? 'closed' : ''}">
+                    <div class="position-header">
+                        <span class="position-symbol">${trade.symbol}</span>
+                        <span class="position-type ${trade.type.toLowerCase()}">${trade.type}</span>
+                    </div>
+                    <div class="position-details">
+                        ${isClosed ? `
+                            <div>
+                                <div style="color: #8899a6; margin-bottom: 2px;">Entry</div>
+                                <div>₹${trade.entry?.toFixed(2) || 'N/A'}</div>
+                            </div>
+                            <div>
+                                <div style="color: #8899a6; margin-bottom: 2px;">Exit</div>
+                                <div>₹${trade.exit?.toFixed(2) || 'N/A'}</div>
+                            </div>
+                            <div>
+                                <div style="color: #8899a6; margin-bottom: 2px;">Lot</div>
+                                <div>${trade.lot}</div>
+                            </div>
+                        ` : `
+                            <div>
+                                <div style="color: #8899a6; margin-bottom: 2px;">Entry Price</div>
+                                <div>₹${trade.entry?.toFixed(2) || 'N/A'}</div>
+                            </div>
+                            <div>
+                                <div style="color: #8899a6; margin-bottom: 2px;">Current LTP</div>
+                                <div style="color: ${ltpColor}; font-weight: 600;">
+                                    ₹${trade.ltp?.toFixed(2) || 'N/A'} 
+                                    <span style="font-size: 9px;">(${ltpChange >= 0 ? '+' : ''}${ltpChange}%)</span>
+                                </div>
+                            </div>
+                            <div class="sl-section">
+                                <div class="sl-label">Stop Loss</div>
+                                <div class="sl-value">₹${slRs} (Rs)</div>
+                                <div class="sl-ltp">LTP: ₹${slLtp}</div>
+                            </div>
+                            <div>
+                                <div style="color: #8899a6; margin-bottom: 2px;">Lock Profit</div>
+                                <div style="color: #10b981;">₹${lockProfit}</div>
+                            </div>
+                            <div>
+                                <div style="color: #8899a6; margin-bottom: 2px;">Strike</div>
+                                <div style="color: #a855f7;">${strike}</div>
+                            </div>
+                            <div>
+                                <div style="color: #8899a6; margin-bottom: 2px;">Trailing SL</div>
+                                <div style="color: #f97316;">₹${trade.trailing_sl?.toFixed(2) || 'N/A'}</div>
+                            </div>
+                            <div style="grid-column: 1 / -1;">
+                                <div style="color: #8899a6; margin-bottom: 2px;">Lot Size</div>
+                                <div>${trade.lot}</div>
+                            </div>
+                        `}
+                        ${trade.entry_time ? `
+                            <div style="grid-column: 1 / -1; font-size: 8px; color: #8899a6; margin-top: 2px;">
+                                ${trade.entry_time} ${trade.exit_time ? `→ ${trade.exit_time}` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="position-pnl">
+                        <span>P&L ${arrow}</span>
+                        <span class="${pnlClass}">${pnlSign}₹${trade.pnl?.toLocaleString() || 0} (${pnlSign}${pnlPercent}%)</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        
+        // Initialize
+        connectWebSocket();
+        addLog('Dashboard initialized');
+    </script>
+</body>
+</html>
