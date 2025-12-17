@@ -55,10 +55,17 @@ print(f"Min Stock Price: ₹{Config.MIN_STOCK_PRICE} | Auto-Exit Time: {Config.A
 print(f"{Fore.CYAN}{'='*70}\n")
 
 # ============WEBSOCKET MANAGER===================# 
+# ============WEBSOCKET MANAGER===================# 
 class WSManager:
     def __init__(self):
         self.app = FastAPI()
-        self.app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+        self.app.add_middleware(
+            CORSMiddleware, 
+            allow_origins=["*"], 
+            allow_credentials=True, 
+            allow_methods=["*"], 
+            allow_headers=["*"]
+        )
         self.connections = []
         self.data = {
             "trades": {}, 
@@ -69,37 +76,47 @@ class WSManager:
             "breakout_status": {}
         }
         
-        @self.app.websocket("/ws/trading")
-@self.app.get("/health")
+        # Health check endpoint
+        @self.app.get("/health")
         async def health_check():
             return {"status": "healthy", "timestamp": datetime.now().isoformat()}
         
+        # Root endpoint
         @self.app.get("/")
         async def root():
             return {"message": "Trading Bot API", "status": "running"}
+        
+        # WebSocket endpoint
+        @self.app.websocket("/ws/trading")
         async def ws_endpoint(ws: WebSocket):
             await ws.accept()
             self.connections.append(ws)
             print(f"{Fore.GREEN}✅ Client connected. Total: {len(self.connections)}")
             await ws.send_json(self.data)
             try:
-                while True: await ws.receive_text()
+                while True: 
+                    await ws.receive_text()
             except:
-                if ws in self.connections: self.connections.remove(ws)
+                if ws in self.connections: 
+                    self.connections.remove(ws)
     
     def start(self):
         def run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            uvicorn.run(self.app, host=Config.WS_HOST, port=Config.WS_PORT, log_level="error")
+            port = int(os.getenv('PORT', Config.WS_PORT))
+            uvicorn.run(self.app, host="0.0.0.0", port=port, log_level="error")
         threading.Thread(target=run, daemon=True).start()
         time.sleep(2)
-        print(f"{Fore.GREEN}🌐 WebSocket Server: ws://localhost:{Config.WS_PORT}/ws/trading")
+        port = int(os.getenv('PORT', Config.WS_PORT))
+        print(f"{Fore.GREEN}🌐 WebSocket Server: ws://0.0.0.0:{port}/ws/trading")
     
     async def broadcast(self, data):
         for conn in self.connections[:]:
-            try: await conn.send_json(data)
-            except: self.connections.remove(conn)
+            try: 
+                await conn.send_json(data)
+            except: 
+                self.connections.remove(conn)
 
 ws = WSManager()
 
