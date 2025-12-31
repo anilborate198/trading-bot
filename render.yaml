@@ -1,5 +1,3 @@
-
-```yaml
 services:
   - type: web
     name: trading-bot
@@ -20,4 +18,4 @@ services:
       - key: ANGEL_TOTP_KEY
         sync: false
     healthCheckPath: /health
-```
+

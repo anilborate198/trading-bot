@@ -1,87 +1,102 @@
-```bash
 #!/bin/bash
 
-# Function to check if market is open (9:15 AM - 3:30 PM on weekdays)
-is_market_time() {
-    current_hour=$(date +%H)
-    current_minute=$(date +%M)
-    current_day=$(date +%u)  # 1=Monday, 7=Sunday
+# Create a simple health check server file
+cat > health_server.py << 'EOF'
+from fastapi import FastAPI
+import uvicorn
+import os
+import subprocess
+import threading
+import time
+from datetime import datetime
+
+app = FastAPI()
+
+@app.get('/')
+@app.get('/health')
+async def health():
+    return {'status': 'running', 'service': 'trading-bot', 'time': str(datetime.now())}
+
+def is_market_time():
+    now = datetime.now()
+    current_time = now.hour * 60 + now.minute
+    current_day = now.weekday()  # 0=Monday, 6=Sunday
     
     # Check if weekday (Monday-Friday)
-    if [ $current_day -ge 6 ]; then
-        return 1  # Weekend
-    fi
+    if current_day >= 5:
+        return False
     
-    # Convert to minutes since midnight
-    current_time=$((10#$current_hour * 60 + 10#$current_minute))
-    market_open=$((9 * 60 + 15))   # 9:15 AM
-    market_close=$((15 * 60 + 30)) # 3:30 PM
+    market_open = 9 * 60 + 15   # 9:15 AM
+    market_close = 15 * 60 + 30  # 3:30 PM
     
-    if [ $current_time -ge $market_open ] && [ $current_time -le $market_close ]; then
-        return 0  # Market is open
-    else
-        return 1  # Market is closed
-    fi
-}
+    return market_open <= current_time <= market_close
 
-# Function to wait until 9:33 AM
-wait_until_trading_time() {
-    while true; do
-        current_hour=$(date +%H)
-        current_minute=$(date +%M)
-        current_day=$(date +%u)
+def wait_until_trading_time():
+    while True:
+        now = datetime.now()
+        current_time = now.hour * 60 + now.minute
+        current_day = now.weekday()
         
-        # If weekend, sleep for 1 hour and check again
-        if [ $current_day -ge 6 ]; then
-            echo "⏰ Weekend - Sleeping for 1 hour..."
-            sleep 3600
+        # If weekend, sleep for 1 hour
+        if current_day >= 5:
+            print(f"⏰ Weekend - Sleeping for 1 hour... ({now})")
+            time.sleep(3600)
             continue
-        fi
         
         # Target: 9:33 AM
-        target_hour=9
-        target_minute=33
+        target_time = 9 * 60 + 33
+        market_close = 15 * 60 + 30
         
-        current_time=$((10#$current_hour * 60 + 10#$current_minute))
-        target_time=$((target_hour * 60 + target_minute))
-        
-        if [ $current_time -ge $target_time ] && [ $current_time -lt $((15 * 60 + 30)) ]; then
-            echo "✅ Trading time reached! Starting bot at $(date)"
-            return 0
-        fi
+        if target_time <= current_time < market_close:
+            print(f"✅ Trading time reached! Starting bot at {now}")
+            return True
         
         # Calculate wait time
-        if [ $current_time -lt $target_time ]; then
-            wait_minutes=$((target_time - current_time))
-            echo "⏰ Current time: $(date +%H:%M) - Waiting $wait_minutes minutes until 9:33 AM..."
-        else
-            # After market hours, wait until next day 9:33 AM
-            wait_minutes=$((1440 - current_time + target_time))
-            echo "⏰ Market closed - Next run tomorrow at 9:33 AM (waiting $wait_minutes minutes)..."
-        fi
+        if current_time < target_time:
+            wait_minutes = target_time - current_time
+            print(f"⏰ Current time: {now.strftime('%H:%M')} - Waiting {wait_minutes} minutes until 9:33 AM...")
+        else:
+            # After market hours, wait until next day
+            wait_minutes = 1440 - current_time + target_time
+            print(f"⏰ Market closed - Next run tomorrow at 9:33 AM (waiting {wait_minutes} minutes)...")
         
-        # Sleep for 1 minute and check again
-        sleep 60
-    done
-}
+        # Sleep for 1 minute
+        time.sleep(60)
 
-# Main loop
-echo "🤖 Trading Bot Service Started"
-echo "📅 Current Time: $(date)"
+def run_trading_bot():
+    print("🤖 Trading Bot Background Service Started")
+    print(f"📅 Current Time: {datetime.now()}")
+    
+    while True:
+        # Wait until 9:33 AM on a weekday
+        wait_until_trading_time()
+        
+        # Run the trading bot
+        print("🚀 Launching trading bot...")
+        try:
+            result = subprocess.run(['python', 'b.py'], capture_output=True, text=True)
+            print(f"Bot output: {result.stdout}")
+            if result.stderr:
+                print(f"Bot errors: {result.stderr}")
+        except Exception as e:
+            print(f"❌ Error running bot: {e}")
+        
+        print(f"✅ Trading session completed at {datetime.now()}")
+        print("⏰ Waiting for next trading session...")
+        
+        # Sleep for 5 hours before checking again
+        time.sleep(18000)
 
-while true; do
-    # Wait until 9:33 AM on a weekday
-    wait_until_trading_time
-    
-    # Run the trading bot
-    echo "🚀 Launching trading bot..."
-    python b.py
-    
-    # After bot finishes, wait for next trading day
-    echo "✅ Trading session completed at $(date)"
-    echo "⏰ Waiting for next trading session..."
-    
-    # Sleep until next day
-    sleep 18000  # 5 hours
-done
-```
+# Start trading bot in background thread
+bot_thread = threading.Thread(target=run_trading_bot, daemon=True)
+bot_thread.start()
+
+if __name__ == '__main__':
+    port = int(os.getenv('PORT', 8000))
+    print(f"🌐 Starting health check server on port {port}...")
+    uvicorn.run(app, host='0.0.0.0', port=port)
+EOF
+
+# Run the combined server
+echo "🚀 Starting combined health check and trading bot service..."
+python health_server.py
