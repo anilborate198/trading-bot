@@ -43,8 +43,8 @@ def wait_until_trading_time():
             time.sleep(3600)
             continue
         
-        # Target: 9:33 AM
-        target_time = 9 * 60 + 33
+        # Target: 11:00 AM
+        target_time = 11 * 60 + 00
         market_close = 15 * 60 + 30
         
         if target_time <= current_time < market_close:
