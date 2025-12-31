@@ -464,7 +464,7 @@ def fetch_long_buildup_from_nse():
     
     # FALLBACK: Manual selection with price filter
     # FALLBACK: Get live data from Angel One instead
-print(Fore.YELLOW + f"⚠️ Using Angel One live market data (LTP > ₹{Config.MIN_STOCK_PRICE})\n")
+       print(Fore.YELLOW + f"⚠️ Using Angel One live market data (LTP > ₹{Config.MIN_STOCK_PRICE})\n")
 
 # High-volume liquid F&O stocks
 candidate_symbols = [
