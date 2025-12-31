@@ -41,7 +41,7 @@ class Config:
     
     # Server - FIXED for Render
     WS_HOST = "0.0.0.0"
-    WS_PORT = int(os.getenv('PORT', 10000))  # Use Render's PORT
+    WS_PORT = 8080  # Different port from health check server  # Use Render's PORT
     LOG_TRADES = True
     LOG_FILE = "trades_log.json"
 
@@ -463,24 +463,71 @@ def fetch_long_buildup_from_nse():
 
     
     # FALLBACK: Manual selection with price filter
-    print(Fore.YELLOW + f"⚠️ Using fallback stock selection (LTP > ₹{Config.MIN_STOCK_PRICE})\n")
-    print(Fore.CYAN + "💡 TIP: For live Long Build Up data:")
-    print(Fore.CYAN + "   • Check NSE website manually")
-    print(Fore.CYAN + "   • Use Sensibull/Opstra screeners")
-    print(Fore.CYAN + "   • Subscribe to premium data providers\n")
-    
-    fallback_stocks = [
-        {'symbol': 'RELIANCE', 'price_change_pct': 0.8, 'oi_change_pct': 2.5, 'score': 3.3, 'ltp': 1285.50, 'volume': 5000000},
-        {'symbol': 'INFY', 'price_change_pct': 0.6, 'oi_change_pct': 2.0, 'score': 2.6, 'ltp': 1850.30, 'volume': 3000000},
-        {'symbol': 'SBIN', 'price_change_pct': 0.9, 'oi_change_pct': 3.0, 'score': 3.9, 'ltp': 825.40, 'volume': 8000000},
-        {'symbol': 'HDFCBANK', 'price_change_pct': 0.5, 'oi_change_pct': 1.8, 'score': 2.3, 'ltp': 1745.60, 'volume': 4000000},
-        {'symbol': 'TATAMOTORS', 'price_change_pct': 1.2, 'oi_change_pct': 3.5, 'score': 4.7, 'ltp': 945.80, 'volume': 6000000}
+    # FALLBACK: Get live data from Angel One instead
+print(Fore.YELLOW + f"⚠️ Using Angel One live market data (LTP > ₹{Config.MIN_STOCK_PRICE})\n")
+
+# High-volume liquid F&O stocks
+candidate_symbols = [
+    'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 
+    'SBIN', 'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT',
+    'AXISBANK', 'TATAMOTORS', 'BAJFINANCE', 'MARUTI', 'SUNPHARMA'
+]
+
+print(Fore.CYAN + f"{'Symbol':<15} {'LTP':<12} {'Status'}")
+print(Fore.CYAN + "="*50)
+
+# Get live prices from Angel One (you're already logged in!)
+from SmartApi import SmartConnect
+fallback_stocks = []
+
+for symbol in candidate_symbols[:10]:  # Check first 10
+    try:
+        # Search for the stock
+        results = client.search("NSE", f"{symbol}-EQ")
+        if not results:
+            continue
+        
+        stock = next((r for r in results if r.get('tradingsymbol', '').endswith('-EQ')), None)
+        if not stock:
+            continue
+        
+        # Get live LTP
+        ltp_data = client.smart_api.ltpData("NSE", stock['tradingsymbol'], stock['symboltoken'])
+        ltp = float(ltp_data.get('data', {}).get('ltp', 0))
+        
+        if ltp > Config.MIN_STOCK_PRICE:
+            fallback_stocks.append({
+                'symbol': symbol,
+                'price_change_pct': 0.5,  # Default positive change
+                'oi_change_pct': 1.0,
+                'score': 2.0,
+                'ltp': ltp,
+                'volume': 1000000
+            })
+            print(Fore.GREEN + f"{symbol:<15} ₹{ltp:<10.2f} ✅ Added")
+        else:
+            print(Fore.YELLOW + f"{symbol:<15} ₹{ltp:<10.2f} ⚠️  Below ₹{Config.MIN_STOCK_PRICE}")
+        
+        time.sleep(0.2)  # Rate limiting
+        
+        if len(fallback_stocks) >= Config.MAX_STOCKS_TO_TRADE:
+            break
+            
+    except Exception as e:
+        print(Fore.RED + f"{symbol:<15} ❌ Error: {e}")
+        continue
+
+print(Fore.CYAN + f"\n{'='*50}\n")
+
+if fallback_stocks:
+    return fallback_stocks[:Config.MAX_STOCKS_TO_TRADE]
+else:
+    # Ultimate fallback with known prices
+    print(Fore.YELLOW + "⚠️ Using hardcoded fallback\n")
+    return [
+        {'symbol': 'RELIANCE', 'price_change_pct': 0.5, 'score': 2.0, 'ltp': 1285.50, 'volume': 5000000},
+        {'symbol': 'HDFCBANK', 'price_change_pct': 0.5, 'score': 2.0, 'ltp': 1745.60, 'volume': 4000000}
     ]
-    
-    # Filter by min price
-    filtered_stocks = [s for s in fallback_stocks if s['ltp'] > Config.MIN_STOCK_PRICE]
-    
-    return filtered_stocks[:Config.MAX_STOCKS_TO_TRADE]
 
 # ============================================================================
 # UTILITIES
