@@ -354,6 +354,8 @@ class AngelClient:
 def fetch_long_buildup_from_nse():
     """
     Fetch REAL Long Build Up stocks from NSE using FnO data
+    Long Build Up = Price UP + OI UP (Bullish signal)
+    FILTERS STOCKS WITH LTP > Config.MIN_STOCK_PRICE
     """
     print(Fore.CYAN + f"\n{'='*70}\n🔍 FETCHING REAL LONG BUILD UP STOCKS FROM NSE\n{'='*70}\n")
     print(Fore.YELLOW + f"📊 Filtering stocks with LTP > ₹{Config.MIN_STOCK_PRICE}\n")
@@ -362,62 +364,33 @@ def fetch_long_buildup_from_nse():
     
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
             'Referer': 'https://www.nseindia.com/',
-            'X-Requested-With': 'XMLHttpRequest',
-            'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin'
         }
         
         session = requests.Session()
         session.headers.update(headers)
         
-        # Step 1: Get cookies from homepage
-        print(Fore.YELLOW + "📡 Initializing NSE session...")
-        home_response = session.get("https://www.nseindia.com", timeout=10)
+        print(Fore.YELLOW + "📡 Connecting to NSE...")
+        session.get("https://www.nseindia.com", timeout=10)
+        time.sleep(2)
         
-        if home_response.status_code != 200:
-            raise Exception(f"Failed to initialize: Status {home_response.status_code}")
+        print(Fore.YELLOW + "📊 Fetching FnO stocks data...")
+        fno_url = "https://www.nseindia.com/api/equity-stockIndices?index=SECURITIES%20IN%20F%26O"
+        response = session.get(fno_url, timeout=15)
         
-        print(Fore.GREEN + f"✅ Session initialized (cookies: {len(session.cookies)})")
-        time.sleep(2)  # Important: Let NSE accept our session
+        if response.status_code != 200:
+            raise Exception(f"Status {response.status_code}")
         
-        # Step 2: Try multiple NSE endpoints
-        endpoints = [
-            "https://www.nseindia.com/api/equity-stockIndices?index=SECURITIES%20IN%20F%26O",
-            "https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050",
-        ]
-        
-        fno_stocks = []
-        for endpoint in endpoints:
-            try:
-                print(Fore.YELLOW + f"📊 Trying endpoint: {endpoint.split('index=')[1]}...")
-                response = session.get(endpoint, timeout=15)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    fno_stocks = data.get('data', [])
-                    if fno_stocks:
-                        print(Fore.GREEN + f"✅ Success! Got {len(fno_stocks)} stocks\n")
-                        break
-            except Exception as e:
-                print(Fore.YELLOW + f"⚠️  Failed: {e}")
-                continue
+        data = response.json()
+        fno_stocks = data.get('data', [])
         
         if not fno_stocks:
-            raise Exception("All NSE endpoints failed")
+            raise Exception("No data received")
         
-        # Rest of your existing filtering code...
-        print(Fore.CYAN + f"{'Symbol':<15} {'Price Change %':<15} {'Volume':<15} {'LTP':<12} {'Status'}")
-        print(Fore.CYAN + "="*80)
+        print(Fore.GREEN + f"✅ Received {len(fno_stocks)} stocks\n")
         
         for stock in fno_stocks:
             try:
@@ -439,95 +412,34 @@ def fetch_long_buildup_from_nse():
                         'ltp': last_price,
                         'volume': volume
                     })
-                    
-                    status = "🟢 LONG BUILD UP" if pct_change > 0.5 else "🟡 Potential"
-                    print(Fore.GREEN + f"{symbol:<15} {pct_change:>+6.2f}%         {volume:>12,}   ₹{last_price:>9.2f}   {status}")
             except:
                 continue
         
         buildup_stocks.sort(key=lambda x: x['score'], reverse=True)
-        top_stocks = buildup_stocks[:Config.MAX_STOCKS_TO_TRADE]
         
-        if top_stocks:
-            print(Fore.CYAN + f"\n{'='*80}")
-            print(Fore.GREEN + f"✅ SELECTED TOP {len(top_stocks)} STOCKS:")
-            print(Fore.CYAN + f"{'='*80}\n")
-            for i, stock in enumerate(top_stocks, 1):
-                print(Fore.GREEN + f"{i}. {stock['symbol']:<12} | +{stock['price_change_pct']:.2f}% | ₹{stock['ltp']:.2f}")
-            print(Fore.CYAN + f"\n{'='*80}\n")
-            return top_stocks
-    
     except Exception as e:
-        print(Fore.RED + f"❌ NSE fetch failed: {e}\n")
+        print(Fore.RED + f"❌ Error fetching from NSE: {e}")
+        print(Fore.YELLOW + "Using fallback method...\n")
     
-
+    # Fallback if NSE failed or no stocks found
+    if not buildup_stocks:
+        print(Fore.YELLOW + f"⚠️ Using fallback stock selection (LTP > ₹{Config.MIN_STOCK_PRICE})\n")
+        print(Fore.CYAN + "💡 TIP: For live Long Build Up data:")
+        print(Fore.CYAN + "   • Check NSE website manually")
+        print(Fore.CYAN + "   • Use Sensibull/Opstra screeners")
+        print(Fore.CYAN + "   • Subscribe to premium data providers\n")
+        
+        buildup_stocks = [
+            {'symbol': 'RELIANCE', 'price_change_pct': 0.8, 'oi_change_pct': 2.5, 'score': 3.3, 'ltp': 1285.50, 'volume': 5000000},
+            {'symbol': 'INFY', 'price_change_pct': 0.6, 'oi_change_pct': 2.0, 'score': 2.6, 'ltp': 1850.30, 'volume': 3000000},
+            {'symbol': 'SBIN', 'price_change_pct': 0.9, 'oi_change_pct': 3.0, 'score': 3.9, 'ltp': 825.40, 'volume': 8000000},
+            {'symbol': 'HDFCBANK', 'price_change_pct': 0.5, 'oi_change_pct': 1.8, 'score': 2.3, 'ltp': 1745.60, 'volume': 4000000},
+            {'symbol': 'TATAMOTORS', 'price_change_pct': 1.2, 'oi_change_pct': 3.5, 'score': 4.7, 'ltp': 945.80, 'volume': 6000000}
+        ]
+        
+        buildup_stocks = [s for s in buildup_stocks if s['ltp'] > Config.MIN_STOCK_PRICE]
     
-    # FALLBACK: Manual selection with price filter
-    # FALLBACK: Get live data from Angel One instead
-       print(Fore.YELLOW + f"⚠️ Using Angel One live market data (LTP > ₹{Config.MIN_STOCK_PRICE})\n")
-
-# High-volume liquid F&O stocks
-candidate_symbols = [
-    'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 
-    'SBIN', 'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT',
-    'AXISBANK', 'TATAMOTORS', 'BAJFINANCE', 'MARUTI', 'SUNPHARMA'
-]
-
-print(Fore.CYAN + f"{'Symbol':<15} {'LTP':<12} {'Status'}")
-print(Fore.CYAN + "="*50)
-
-# Get live prices from Angel One (you're already logged in!)
-from SmartApi import SmartConnect
-fallback_stocks = []
-
-for symbol in candidate_symbols[:10]:  # Check first 10
-    try:
-        # Search for the stock
-        results = client.search("NSE", f"{symbol}-EQ")
-        if not results:
-            continue
-        
-        stock = next((r for r in results if r.get('tradingsymbol', '').endswith('-EQ')), None)
-        if not stock:
-            continue
-        
-        # Get live LTP
-        ltp_data = client.smart_api.ltpData("NSE", stock['tradingsymbol'], stock['symboltoken'])
-        ltp = float(ltp_data.get('data', {}).get('ltp', 0))
-        
-        if ltp > Config.MIN_STOCK_PRICE:
-            fallback_stocks.append({
-                'symbol': symbol,
-                'price_change_pct': 0.5,  # Default positive change
-                'oi_change_pct': 1.0,
-                'score': 2.0,
-                'ltp': ltp,
-                'volume': 1000000
-            })
-            print(Fore.GREEN + f"{symbol:<15} ₹{ltp:<10.2f} ✅ Added")
-        else:
-            print(Fore.YELLOW + f"{symbol:<15} ₹{ltp:<10.2f} ⚠️  Below ₹{Config.MIN_STOCK_PRICE}")
-        
-        time.sleep(0.2)  # Rate limiting
-        
-        if len(fallback_stocks) >= Config.MAX_STOCKS_TO_TRADE:
-            break
-            
-    except Exception as e:
-        print(Fore.RED + f"{symbol:<15} ❌ Error: {e}")
-        continue
-
-print(Fore.CYAN + f"\n{'='*50}\n")
-
-if fallback_stocks:
-    return fallback_stocks[:Config.MAX_STOCKS_TO_TRADE]
-else:
-    # Ultimate fallback with known prices
-    print(Fore.YELLOW + "⚠️ Using hardcoded fallback\n")
-    return [
-        {'symbol': 'RELIANCE', 'price_change_pct': 0.5, 'score': 2.0, 'ltp': 1285.50, 'volume': 5000000},
-        {'symbol': 'HDFCBANK', 'price_change_pct': 0.5, 'score': 2.0, 'ltp': 1745.60, 'volume': 4000000}
-    ]
+    return buildup_stocks[:Config.MAX_STOCKS_TO_TRADE]
 
 # ============================================================================
 # UTILITIES
