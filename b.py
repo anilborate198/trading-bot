@@ -603,16 +603,22 @@ def get_atm(client, symbol, expiry):
     return None
 
 def is_open():
-    now = datetime.now()
+    import pytz
+    IST = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(IST)
     if now.weekday() >= 5:
         return False
-    return now.replace(hour=9, minute=15, second=0) <= now <= now.replace(hour=15, minute=30, second=0)
+    market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open <= now <= market_close
 
 def should_auto_exit():
-    """Check if it's time for auto-exit (3:15 PM)"""
-    now = datetime.now()
+    """Check if it's time for auto-exit (3:15 PM IST)"""
+    import pytz
+    IST = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(IST)
     exit_hour, exit_minute = map(int, Config.AUTO_EXIT_TIME.split(':'))
-    exit_time = now.replace(hour=exit_hour, minute=exit_minute, second=0)
+    exit_time = now.replace(hour=exit_hour, minute=exit_minute, second=0, microsecond=0)
     return now >= exit_time
 
 # ============================================================================
