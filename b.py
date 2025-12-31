@@ -354,8 +354,6 @@ class AngelClient:
 def fetch_long_buildup_from_nse():
     """
     Fetch REAL Long Build Up stocks from NSE using FnO data
-    Long Build Up = Price UP + OI UP (Bullish signal)
-    FILTERS STOCKS WITH LTP > Config.MIN_STOCK_PRICE
     """
     print(Fore.CYAN + f"\n{'='*70}\n🔍 FETCHING REAL LONG BUILD UP STOCKS FROM NSE\n{'='*70}\n")
     print(Fore.YELLOW + f"📊 Filtering stocks with LTP > ₹{Config.MIN_STOCK_PRICE}\n")
@@ -363,15 +361,15 @@ def fetch_long_buildup_from_nse():
     buildup_stocks = []
     
     try:
-        # Setup session with proper headers
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
             'Referer': 'https://www.nseindia.com/',
-            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
+            'X-Requested-With': 'XMLHttpRequest',
+            'sec-ch-ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
             'Sec-Fetch-Dest': 'empty',
@@ -380,123 +378,89 @@ def fetch_long_buildup_from_nse():
         }
         
         session = requests.Session()
+        session.headers.update(headers)
         
-        # Step 1: Initialize session
-        print(Fore.YELLOW + "📡 Connecting to NSE...")
-        session.get("https://www.nseindia.com", headers=headers, timeout=10)
-        time.sleep(2)
+        # Step 1: Get cookies from homepage
+        print(Fore.YELLOW + "📡 Initializing NSE session...")
+        home_response = session.get("https://www.nseindia.com", timeout=10)
         
-        # Step 2: Get FnO stocks with OI data
-        print(Fore.YELLOW + "📊 Fetching FnO stocks data...\n")
+        if home_response.status_code != 200:
+            raise Exception(f"Failed to initialize: Status {home_response.status_code}")
         
-        fno_url = "https://www.nseindia.com/api/equity-stockIndices?index=SECURITIES%20IN%20F%26O"
-        response = session.get(fno_url, headers=headers, timeout=15)
+        print(Fore.GREEN + f"✅ Session initialized (cookies: {len(session.cookies)})")
+        time.sleep(2)  # Important: Let NSE accept our session
         
-        if response.status_code != 200:
-            raise Exception(f"NSE API returned status code: {response.status_code}")
+        # Step 2: Try multiple NSE endpoints
+        endpoints = [
+            "https://www.nseindia.com/api/equity-stockIndices?index=SECURITIES%20IN%20F%26O",
+            "https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050",
+        ]
         
-        data = response.json()
-        fno_stocks = data.get('data', [])
+        fno_stocks = []
+        for endpoint in endpoints:
+            try:
+                print(Fore.YELLOW + f"📊 Trying endpoint: {endpoint.split('index=')[1]}...")
+                response = session.get(endpoint, timeout=15)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    fno_stocks = data.get('data', [])
+                    if fno_stocks:
+                        print(Fore.GREEN + f"✅ Success! Got {len(fno_stocks)} stocks\n")
+                        break
+            except Exception as e:
+                print(Fore.YELLOW + f"⚠️  Failed: {e}")
+                continue
         
         if not fno_stocks:
-            raise Exception("No data received from NSE")
+            raise Exception("All NSE endpoints failed")
         
-        print(Fore.GREEN + f"✅ Received data for {len(fno_stocks)} F&O stocks\n")
+        # Rest of your existing filtering code...
         print(Fore.CYAN + f"{'Symbol':<15} {'Price Change %':<15} {'Volume':<15} {'LTP':<12} {'Status'}")
         print(Fore.CYAN + "="*80)
         
-        # Step 3: Filter for Long Build Up criteria + MIN PRICE
         for stock in fno_stocks:
             try:
                 symbol = stock.get('symbol', '')
-                
-                # Skip indices
                 if symbol in ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY']:
                     continue
                 
                 pct_change = float(stock.get('pChange', 0))
                 last_price = float(stock.get('lastPrice', 0))
                 volume = int(stock.get('totalTradedVolume', 0))
-                prev_close = float(stock.get('previousClose', 0))
-                
-                # Long Build Up Criteria:
-                # 1. Price should be UP (pct_change > 0)
-                # 2. Should have decent volume
-                # 3. Should be a valid F&O stock
-                # 4. LTP should be > MIN_STOCK_PRICE (NEW)
                 
                 if pct_change > 0.2 and volume > 100000 and last_price > Config.MIN_STOCK_PRICE:
-                    # Calculate score based on price momentum
-                    score = pct_change * (volume / 1000000)  # Weight by volume
-                    
+                    score = pct_change * (volume / 1000000)
                     buildup_stocks.append({
                         'symbol': symbol,
                         'price_change_pct': pct_change,
-                        'oi_change_pct': pct_change,  # Using price as proxy for OI
+                        'oi_change_pct': pct_change,
                         'score': score,
                         'ltp': last_price,
-                        'volume': volume,
-                        'prev_close': prev_close
+                        'volume': volume
                     })
                     
                     status = "🟢 LONG BUILD UP" if pct_change > 0.5 else "🟡 Potential"
                     print(Fore.GREEN + f"{symbol:<15} {pct_change:>+6.2f}%         {volume:>12,}   ₹{last_price:>9.2f}   {status}")
-            
-            except Exception as e:
+            except:
                 continue
         
-        if not buildup_stocks:
-            print(Fore.YELLOW + f"\n⚠️ No Long Build Up stocks found with LTP > ₹{Config.MIN_STOCK_PRICE}")
-            print(Fore.YELLOW + "📊 Using top gainers from F&O segment...\n")
-            
-            # Fallback: Get top gainers with price filter
-            for stock in fno_stocks:
-                try:
-                    symbol = stock.get('symbol', '')
-                    if symbol in ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY']:
-                        continue
-                    
-                    pct_change = float(stock.get('pChange', 0))
-                    last_price = float(stock.get('lastPrice', 0))
-                    volume = int(stock.get('totalTradedVolume', 0))
-                    
-                    if pct_change > 0 and last_price > Config.MIN_STOCK_PRICE:
-                        buildup_stocks.append({
-                            'symbol': symbol,
-                            'price_change_pct': pct_change,
-                            'oi_change_pct': pct_change,
-                            'score': pct_change,
-                            'ltp': last_price,
-                            'volume': volume
-                        })
-                except:
-                    continue
-        
-        # Sort by score (descending)
         buildup_stocks.sort(key=lambda x: x['score'], reverse=True)
-        
-        # Take top stocks
         top_stocks = buildup_stocks[:Config.MAX_STOCKS_TO_TRADE]
         
-        print(Fore.CYAN + f"\n{'='*80}")
-        print(Fore.GREEN + f"✅ SELECTED TOP {len(top_stocks)} LONG BUILD UP STOCKS (LTP > ₹{Config.MIN_STOCK_PRICE}):")
-        print(Fore.CYAN + f"{'='*80}\n")
-        
-        for i, stock in enumerate(top_stocks, 1):
-            print(Fore.GREEN + f"{i}. {stock['symbol']:<12} | Price: +{stock['price_change_pct']:.2f}% | "
-                  f"LTP: ₹{stock['ltp']:.2f} | Score: {stock['score']:.2f}")
-        
-        print(Fore.CYAN + f"\n{'='*80}\n")
-        
-        return top_stocks
+        if top_stocks:
+            print(Fore.CYAN + f"\n{'='*80}")
+            print(Fore.GREEN + f"✅ SELECTED TOP {len(top_stocks)} STOCKS:")
+            print(Fore.CYAN + f"{'='*80}\n")
+            for i, stock in enumerate(top_stocks, 1):
+                print(Fore.GREEN + f"{i}. {stock['symbol']:<12} | +{stock['price_change_pct']:.2f}% | ₹{stock['ltp']:.2f}")
+            print(Fore.CYAN + f"\n{'='*80}\n")
+            return top_stocks
     
-    except requests.exceptions.Timeout:
-        print(Fore.RED + "❌ NSE API timeout. Using fallback method...\n")
-    except requests.exceptions.ConnectionError:
-        print(Fore.RED + "❌ Connection error. Using fallback method...\n")
     except Exception as e:
-        print(Fore.RED + f"❌ Error fetching from NSE: {e}\n")
-        print(Fore.YELLOW + "Using fallback method...\n")
+        print(Fore.RED + f"❌ NSE fetch failed: {e}\n")
+    
+
     
     # FALLBACK: Manual selection with price filter
     print(Fore.YELLOW + f"⚠️ Using fallback stock selection (LTP > ₹{Config.MIN_STOCK_PRICE})\n")
