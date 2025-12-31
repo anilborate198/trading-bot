@@ -112,4 +112,3 @@ EOF
 
 # Run the combined server
 echo "🚀 Starting combined health check and trading bot service..."
-python health_server.py"# Updated $(date)" 
